@@ -68,35 +68,62 @@ public class Program {
     }
 
     private static void Main(string[] args) {
-        NotifyIcon notifyIcon = InitializeNotifyIcon();
 
-        NotificationPosition initialPosition = LoadNotificationPosition();
+        // Subscribe to the UnhandledException event
+        AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionHandler;
 
-        MenuItem topLeftMenuItem = new MenuItem("Top Left");
-        MenuItem topRightMenuItem = new MenuItem("Top Right");
-        MenuItem exitMenuItem = new MenuItem("Exit");
+        try {
+            NotifyIcon notifyIcon = InitializeNotifyIcon();
 
-        ContextMenu contextMenu = new ContextMenu();
-        contextMenu.MenuItems.Add(topLeftMenuItem);
-        contextMenu.MenuItems.Add(topRightMenuItem);
-        contextMenu.MenuItems.Add(exitMenuItem);
+            NotificationPosition initialPosition = LoadNotificationPosition();
 
-        SetCheckmarks(initialPosition, topLeftMenuItem, topRightMenuItem);
+            MenuItem topLeftMenuItem = new MenuItem("Top Left");
+            MenuItem topRightMenuItem = new MenuItem("Top Right");
+            MenuItem exitMenuItem = new MenuItem("Exit");
 
-        topLeftMenuItem.Click += (sender, e) => ChangePosition(NotificationPosition.TopLeft, topLeftMenuItem, topRightMenuItem);
-        topRightMenuItem.Click += (sender, e) => ChangePosition(NotificationPosition.TopRight, topLeftMenuItem, topRightMenuItem);
-        exitMenuItem.Click += new EventHandler(ExitMenuItem_Click);
+            ContextMenu contextMenu = new ContextMenu();
+            contextMenu.MenuItems.Add(topLeftMenuItem);
+            contextMenu.MenuItems.Add(topRightMenuItem);
+            contextMenu.MenuItems.Add(exitMenuItem);
 
-        notifyIcon.ContextMenu = contextMenu;
+            SetCheckmarks(initialPosition, topLeftMenuItem, topRightMenuItem);
 
-        Task.Run(() => {
-            while (true) {
-                HandleNotifications(LoadNotificationPosition());
-                Thread.Sleep(10);
-            }
-        });
+            topLeftMenuItem.Click += (sender, e) => ChangePosition(NotificationPosition.TopLeft, topLeftMenuItem, topRightMenuItem);
+            topRightMenuItem.Click += (sender, e) => ChangePosition(NotificationPosition.TopRight, topLeftMenuItem, topRightMenuItem);
+            exitMenuItem.Click += new EventHandler(ExitMenuItem_Click);
 
-        Application.Run();
+            notifyIcon.ContextMenu = contextMenu;
+
+            Task.Run(() => {
+                while (true) {
+                    HandleNotifications(LoadNotificationPosition());
+                    Thread.Sleep(10);
+                }
+            });
+
+            Application.Run();
+
+        } catch (Exception ex) {
+            LogExceptionToFile(ex); // Log any exceptions that occur within the main logic
+        }
+    }
+
+    private static void UnhandledExceptionHandler(object sender, UnhandledExceptionEventArgs e) {
+        Exception ex = e.ExceptionObject as Exception;
+        if (ex != null) {
+            LogExceptionToFile(ex);
+            Console.WriteLine("The program encountered an unhandled exception and has crashed. Please see crash.log for more details.");
+        }
+    }
+
+    private static void LogExceptionToFile(Exception ex) {
+        string crashLogFilePath = "crash.log";
+        using (StreamWriter writer = new StreamWriter(crashLogFilePath, true)) {
+            writer.WriteLine("Crash Date: " + DateTime.Now);
+            writer.WriteLine("Exception Message: " + ex.Message);
+            writer.WriteLine("Stack Trace: " + ex.StackTrace);
+            writer.WriteLine(new string('-', 80));
+        }
     }
 
     private static NotifyIcon InitializeNotifyIcon() {
@@ -174,6 +201,8 @@ public class Program {
             SetWindowPos(hwnd, IntPtr.Zero, Constants.SystemNotificationLeftMargin, Constants.SystemNotificationTopMargin, 0, 0, SWP_SHOWWINDOW);
         }
     }
+
+
 
 
     private static Rectangle GetWindowRectangle(IntPtr hwnd) {
