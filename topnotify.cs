@@ -30,6 +30,8 @@ public class Program {
     const int SWP_SHOWWINDOW = 0x0040;
 
     public static int Cooldown;
+    private static bool exceptionLogged = false;
+
 
     private static string SettingsFilePath {
         get {
@@ -65,10 +67,8 @@ public class Program {
         File.WriteAllLines(SettingsFilePath, lines);
     }
 
-    public static void Main(string[] args) {
-        NotifyIcon notifyIcon = new NotifyIcon();
-        notifyIcon.Icon = new Icon("question_answer_white_24dp.ico");
-        notifyIcon.Visible = true;
+    private static void Main(string[] args) {
+        NotifyIcon notifyIcon = InitializeNotifyIcon();
 
         NotificationPosition initialPosition = LoadNotificationPosition();
 
@@ -91,13 +91,19 @@ public class Program {
 
         Task.Run(() => {
             while (true) {
-                HandleTeamsNotifications(LoadNotificationPosition());
-                HandleSystemNotifications(LoadNotificationPosition());
+                HandleNotifications(LoadNotificationPosition());
                 Thread.Sleep(10);
             }
         });
 
         Application.Run();
+    }
+
+    private static NotifyIcon InitializeNotifyIcon() {
+        NotifyIcon notifyIcon = new NotifyIcon();
+        notifyIcon.Icon = new Icon("question_answer_white_24dp.ico");
+        notifyIcon.Visible = true;
+        return notifyIcon;
     }
 
     private static void SetCheckmarks(NotificationPosition position, MenuItem topLeftMenuItem, MenuItem topRightMenuItem) {
@@ -108,19 +114,15 @@ public class Program {
     private static void ChangePosition(NotificationPosition newPosition, MenuItem topLeftMenuItem, MenuItem topRightMenuItem) {
         SetNotificationPosition(newPosition);
         SetCheckmarks(newPosition, topLeftMenuItem, topRightMenuItem);
-        SetTrayIconPosition(newPosition);
     }
 
     private static void SetNotificationPosition(NotificationPosition position) {
         SaveNotificationPosition(position);
     }
 
-    private static void SetTrayIconPosition(NotificationPosition position) {
-        int x = position == NotificationPosition.TopLeft ? 15 : Screen.PrimaryScreen.Bounds.Width - 115;
-        var hwnd = FindWindow("Shell_TrayWnd", null);
-        if (hwnd != IntPtr.Zero) {
-            SetWindowPos(hwnd, IntPtr.Zero, x, 0, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW);
-        }
+    private static void HandleNotifications(NotificationPosition position) {
+        HandleTeamsNotifications(position);
+        HandleSystemNotifications(position);
     }
 
     private static void HandleTeamsNotifications(NotificationPosition position) {
@@ -131,27 +133,48 @@ public class Program {
             if (chromeHwnd != IntPtr.Zero) {
                 Cooldown = 0;
 
-                int x = position == NotificationPosition.TopLeft ? 15 : Screen.PrimaryScreen.Bounds.Width - 115;
-
-                Rectangle notificationRect = GetWindowRectangle(teamsHwnd);
-                int notificationWidth = notificationRect.Width - notificationRect.X;
-
                 if (position == NotificationPosition.TopRight) {
-                    x = Screen.PrimaryScreen.Bounds.Width - notificationWidth - 15;
+                    Rectangle notificationRect = GetWindowRectangle(teamsHwnd);
+                    int notificationWidth = notificationRect.Width - notificationRect.X;
+                    int x = Screen.PrimaryScreen.Bounds.Width - notificationWidth - Constants.NotificationMargin;
+                    SetWindowPos(teamsHwnd, IntPtr.Zero, x, Constants.NotificationTopMargin, Constants.NotificationWidth, 0, SWP_SHOWWINDOW);
+                } else {
+                    SetWindowPos(teamsHwnd, IntPtr.Zero, Constants.NotificationLeftMargin, Constants.NotificationTopMargin, Constants.NotificationWidth, 0, SWP_SHOWWINDOW);
                 }
-
-                SetWindowPos(teamsHwnd, IntPtr.Zero, x, 15, 100, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW);
             } else {
                 if (Cooldown >= 30) {
-                    SetWindowPos(teamsHwnd, IntPtr.Zero, 0, -9999, -9999, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW);
+                    SetWindowPos(teamsHwnd, IntPtr.Zero, 0, Constants.HiddenYPosition, Constants.HiddenWidth, 0, SWP_SHOWWINDOW);
                     Cooldown = 0;
                 }
                 Cooldown += 1;
             }
-        } catch {
-            // User Doesn't Have Teams
+
+            // Reset the exceptionLogged flag since we have successfully handled the situation
+            exceptionLogged = false;
+        } catch (Exception ex) {
+            // Log the exception only if it hasn't been logged before
+            if (!exceptionLogged) {
+                Console.WriteLine("An error occurred while handling Teams notifications:");
+                Console.WriteLine(ex.Message);
+                Console.WriteLine(ex.StackTrace);
+                exceptionLogged = true; // Set the flag to true so that the exception is not logged repeatedly
+            }
         }
     }
+
+    private static void HandleSystemNotifications(NotificationPosition position) {
+        var hwnd = FindWindow("Windows.UI.Core.CoreWindow", "New notification");
+
+        if (position == NotificationPosition.TopRight) {
+            Rectangle notificationRect = GetWindowRectangle(hwnd);
+            int notificationWidth = notificationRect.Width - notificationRect.X;
+            int x = Screen.PrimaryScreen.Bounds.Width - notificationWidth - Constants.SystemNotificationMargin;
+            SetWindowPos(hwnd, IntPtr.Zero, x, Constants.SystemNotificationTopMargin, 0, 0, SWP_SHOWWINDOW);
+        } else {
+            SetWindowPos(hwnd, IntPtr.Zero, Constants.SystemNotificationLeftMargin, Constants.SystemNotificationTopMargin, 0, 0, SWP_SHOWWINDOW);
+        }
+    }
+
 
     private static Rectangle GetWindowRectangle(IntPtr hwnd) {
         Rectangle rectangle = new Rectangle();
@@ -159,15 +182,21 @@ public class Program {
         return rectangle;
     }
 
-    private static void HandleSystemNotifications(NotificationPosition position) {
-        var hwnd = FindWindow("Windows.UI.Core.CoreWindow", "New notification");
-        int x = position == NotificationPosition.TopLeft ? 0 : Screen.PrimaryScreen.Bounds.Width - 150;
-
-        SetWindowPos(hwnd, IntPtr.Zero, x, -50, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW);
-    }
 
     private static void ExitMenuItem_Click(object sender, EventArgs e) {
         Application.Exit();
+    }
+
+    private static class Constants {
+        public const int NotificationMargin = 15;
+        public const int NotificationTopMargin = 15;
+        public const int NotificationWidth = 100;
+        public const int NotificationLeftMargin = 0;
+        public const int HiddenYPosition = -9999;
+        public const int HiddenWidth = -9999;
+        public const int SystemNotificationMargin = 50;
+        public const int SystemNotificationTopMargin = -50;
+        public const int SystemNotificationLeftMargin = 0;
     }
 
 }
