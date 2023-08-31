@@ -154,8 +154,20 @@ public class Program {
 
     private static void HandleTeamsNotifications(NotificationPosition position) {
         try {
-            var teamsHwnd = FindWindow("Chrome_WidgetWin_1", "Microsoft Teams Notification");
-            var chromeHwnd = FindWindowEx(teamsHwnd, IntPtr.Zero, "Chrome_RenderWidgetHostHWND", "Chrome Legacy Window");
+            var teamsHwnd = IntPtr.Zero;
+            var chromeHwnd = IntPtr.Zero;
+
+            // Wait for the Teams notification window to become available
+            int maxWaitTime = 10000; // Maximum wait time in milliseconds
+            int waitInterval = 100;  // Interval between checks in milliseconds
+            int waitedTime = 0;
+
+            while (teamsHwnd == IntPtr.Zero && waitedTime < maxWaitTime) {
+                teamsHwnd = FindWindow("Chrome_WidgetWin_1", "Microsoft Teams Notification");
+                chromeHwnd = FindWindowEx(teamsHwnd, IntPtr.Zero, "Chrome_RenderWidgetHostHWND", "Chrome Legacy Window");
+                Thread.Sleep(waitInterval);
+                waitedTime += waitInterval;
+            }
 
             if (chromeHwnd != IntPtr.Zero) {
                 Cooldown = 0;
@@ -188,6 +200,7 @@ public class Program {
             }
         }
     }
+
 
     private static void HandleSystemNotifications(NotificationPosition position) {
         var hwnd = FindWindow("Windows.UI.Core.CoreWindow", "New notification");
